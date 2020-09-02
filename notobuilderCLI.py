@@ -36,6 +36,8 @@ from fontTools.ttLib.tables._c_m_a_p import CmapSubtable
 from third_party.scalefonts import scale_font
 
 
+# import logging
+
 
 class Download:
     def __init__(self, repo_names, scriptsFolder, hinted=False):
@@ -73,9 +75,6 @@ class Download:
                 if file["name"] == "instance_ttf":
                     self.sha = file["sha"]
         return self.sha
-        # if response.getcode() != 404
-        # elif response.getcode() == 404:
-        #     print("Too much Gituh Requests.")
 
     def writeSha(self, repoName):
         shaTxt = os.path.join(self.notoFontsFolder, repoName, "sha.md")
@@ -97,14 +96,14 @@ class Download:
                     + "/tree/master/fonts/ttf/hinted/instance_ttf"
                 )
             try:
-                r = urllib.request.urlretrieve("https://github.com/notofonts/" + i)
+                _ = self.getSha(i)
                 api_url = self.createUrl(url)
             except:
                 try:
                     askedByUser = i
                     i = i.replace("Serif", "Sans")
                     url = url.replace("Serif", "Sans")
-                    r = urllib.request.urlretrieve("https://github.com/notofonts/" + i)
+                    _ = self.getSha(i)
                     for z in range(len(self.editedRepoNames)):
                         if self.editedRepoNames[z] == askedByUser:
                             self.editedRepoNames[z] = i
@@ -158,12 +157,15 @@ class Download:
                             )
         if len(branch) == 0:
             branch = re.findall(r"/blob/(.*?)/", url)[0]
+            # download_dirs = re.findall(r"/blob/" + branch + r"/(.*)", url)[0]
             api_url = re.sub(r"/blob/.*?/", "/contents/", api_url)
         else:
             branch = branch[0]
+            # download_dirs = re.findall(r"/tree/" + branch + r"/(.*)", url)[0]
             api_url = re.sub(r"/tree/.*?/", "/contents/", api_url)
 
         api_url = api_url + "?ref=" + branch
+        # return api_url, download_dirs
         return api_url
 
     def getFilepathFromUrl(self, url, dirpath):
@@ -178,22 +180,18 @@ class Download:
 
 
 class GlyphsToRemove:
+    def add(self, unicodez: list, scriptname):
+        for x in unicodez:
+            setattr(self, str(x), scriptname)
 
-    def __init__(self):
-        self.writingSys2glifToRemove = {}
-
-    def addGlyphToRemove(self, unicodez: list, scriptname):
-        if scriptname in self.writingSys2glifToRemove:
-            previous = list(self.writingSys2glifToRemove[scriptname])
-            self.writingSys2glifToRemove[scriptname] = set(unicodez + previous)
-        else:
-            self.writingSys2glifToRemove[scriptname] = set(unicodez)
+    def addGlyphToRemove(self, unicodez, scriptname):
+        self.add(unicodez, scriptname)
 
     def getListFor(self, scriptname):
-        return [x for x in writingSys2glifToRemove[scriptname]]
+        return [x for x in vars(self) if getattr(self, x) == scriptname]
 
     def getScript(self):
-        return set([i for i in self.writingSys2glifToRemove])
+        return set([getattr(self, x) for x in vars(self)])
 
     def getGlyphsToRemove(self, scriptname):
         return self.getListFor(scriptname)
@@ -201,11 +199,15 @@ class GlyphsToRemove:
     def getScriptsToSubset(self):
         return self.getScript()
 
-    def getDict(self):
-        return self.writingSys2glifToRemove
+    def __str__(self):
+        return str(vars(self))
+
+    def __repr__(self):
+        return str(self)
 
 
 class Notobuilder:
+
     """ docstring
     """
 
@@ -268,7 +270,7 @@ class Notobuilder:
         ]
 
         self.arabicFamilies = [
-            "NotoNaskhArabic", "NotoNaskhArabicUI"
+            "NotoNaskhArabic",
         ]
 
         self.repo_naming_translation = {
@@ -279,7 +281,7 @@ class Notobuilder:
             "NotoSerifNaskhUI": "NotoNaskhArabicUI",
             "NotoSerifNastaliq": "NotoNastaliqUrdu",
             "NotoSerifHebrew": "NotoRashiHebrew",
-            # "NotoSerifNushu": "NotoTraditionalNushu", #because traditional Nushu naming is bugged
+            # "NotoSerifNushu": "NotoTraditionalNushu",
             "NotoSerifTamil-Italic": "NotoSerifTamilSlanted",
             "NotoSansTamil-Italic": "NotoSansTamil",  # Does not exists, but Serif "Italic" (slanted) does.
             "NotoSansNaskh": "NotoSansArabic",
@@ -301,8 +303,8 @@ class Notobuilder:
             }
 
         self.sansOnly = ["CanadianAboriginal", "Kufi", "Music",
-                        "InscriptionalPahlavi", "PsalterPahlavi",
-                        "Javanese"]
+                        "InscriptionalPahlavi", "PsalterPahlavi"
+                        ]
 
         self.fonts_with_ui_version = [
             "NotoSansKannada",
@@ -325,34 +327,14 @@ class Notobuilder:
             # "NotoSansThai",
             ]
 
+        # RUN THE BUILDER
 
-        #1. FIND THE REPO NAME
         self.buildRepoName()
-        #2. DOWNLOAD FONTS AND SWITCH CONTRAST STYLE IF NEEDED
         dl = Download(self.repoNames, self.scriptsFolder, self.hinted)
         dl.dwnldFonts()
         self.repoNames = dl.getEditedRepoNames()
-        #3. BUILD ALL WIDTH-WEIGHT STYLE NAME
+
         self.buildWghtWdthstyleName()
-        #4. FOR EACH STYLE ASKED : (e.g. Bold, then CondensedBold, etc.)
-        for s in self.wghtwdth_styles:
-            # 4.a find the fonts thaht matches the style
-            self.buildFonts2mergeList(s)
-            # 4b. SUBSET LATIN / GREEK / CYRILLIC IF NEEDED
-            self.lgcSub()
-            #4c. SUBSET ARABIC IF NEEDED
-            if "Arabic" in self.writingSystems:
-                if "BasicArabic" in self.preset:
-                    for ar in self.repoNames:
-                        if ar in self.arabicFamilies:
-                            self.arabicSub(ar)
-            #4d. RESOLVE DUPLICATES IF IT'S NOT ALREADY DONE
-            if self.duplicatesAreResolved is False:
-                self.resolveDuplicate()
-            #4e. REMOVE DUPLICATES
-            self.prepFontsForMerging()
-            #4f. ACTUALLY MERGE AND RENAME FONTS
-            self.merging()
 
     @property
     def monospaced(self):
@@ -417,9 +399,11 @@ class Notobuilder:
         self.panEuropeanSub = []
         lgcSub = [s for s in self.writingSystems if s in ["Latin", "Greek", "Cyrillic"]]
         if 0 < len(lgcSub) < 3 and "Full" not in self.preset:
+            # add folder
             europeanSubsetFolder = os.path.join(self.notoFontsFolder, "EuropeanSubset")
             if not os.path.exists(europeanSubsetFolder):
                 os.makedirs(europeanSubsetFolder)
+            # make the list of glyphs to keep
             for script in lgcSub:
                 self.readJson(
                     os.path.join(self.scriptsFolder, "subsets", script.lower() + "_subsets.json"), script)
@@ -431,6 +415,8 @@ class Notobuilder:
                         )
                     font.save(newpath)
                     self.fonts2merge_list = self.listReplacer(ftpath, newpath, self.fonts2merge_list)
+        else:
+            pass  # keep all
 
     def arabicSub(self, repoName):
         self.arabicSub = []
@@ -452,6 +438,7 @@ class Notobuilder:
                         )
                 font.save(newpath)
                 self.fonts2merge_list = self.listReplacer(ftpath, newpath, self.fonts2merge_list)
+
 
     def buildRepoName(self):
         self.repoNames = []
@@ -479,9 +466,14 @@ class Notobuilder:
                 name = name + "UI"
             if name not in self.repoNames:
                 self.repoNames.append(name)
-        if "ExtendedTamil" in self.preset:
+        if "TamilSupplement" in self.preset:
             self.repoNames.append("NotoSansTamilSupplement")
 
+        # dl = Download(self.repoNames, self.scriptsFolder, self.hinted)
+        # dl.dwnldFonts()
+        # self.repoNames = dl.getEditedRepoNames()
+
+        # self.buildWghtWdthstyleName()
 
     def buildWghtWdthstyleName(self):
         if self.compatibility is True:
@@ -508,135 +500,165 @@ class Notobuilder:
                     else:
                         self.wghtwdth_styles.append(wdth + "-" +wght)
 
-    def buildFonts2mergeList(self, s):
+        self.buildFonts2mergeList()
+
+    def buildFonts2mergeList(self):
         fallback = False
         localisation = 8
         typographicStyles = ["Black", "Bold", "SemiBold",
                 "Medium", "Regular", "Light",
                 "SemiLight", "Light", "Thin", "Regular"
                 ]
-        # for s in self.wghtwdth_styles:
-        print("> Gather fonts to build", self.newName, s)
-        self.tempStyle = s.replace("-", "")
-        self.fonts2merge_list = []
-        # print("> The followings fonts can be merged:")
-        for n in self.repoNames:
-            ftname = "-".join([n, self.tempStyle]) + ".ttf"
-            if "Italic" in ftname:
-                old = "-Italic-" + self.tempStyle
-                new = "-" + self.tempStyle + "Italic"
-                ftname = ftname.replace(
-                    old, new.replace("Regular", "")
-                )  # remove Reg in the Italic case)
-            ftpath = os.path.join(self.notoFontsFolder, n, self.path, ftname)
-            if Path(ftpath).exists():
-                print("  ✓", os.path.basename(ftpath))
-                self.fonts2merge_list.append(ftpath)
-            else:
-                if "-" in s: #width incompatibility
-                    extractedWidth = s.split("-")[0]
-
-                    fallback = False
-                    if s.split("-")[1] in typographicStyles:
-                        localisation = typographicStyles.index(s.split("-")[1])
-                    for styl in typographicStyles[localisation:]:
-                        if fallback is False:
-                            if os.path.isfile(
-                                os.path.join(
-                                    os.path.dirname(ftpath),
-                                    os.path.basename(ftpath.replace(self.tempStyle, extractedWidth+styl)),
-                                )
-                            ):
-                                self.fonts2merge_list.append(
-                                    ftpath.replace(
-                                        ftpath,
-                                        os.path.join(
-                                            os.path.dirname(ftpath),
-                                            os.path.basename(
-                                                ftpath.replace(self.tempStyle, extractedWidth+styl)
-                                            ),
-                                        ),
-                                    )
-                                )
-                                print(
-                                    "  ✓",
-                                    os.path.basename(ftpath.replace(self.tempStyle, extractedWidth+styl)),
-                                    "[FALLBACK]",
-                                )
-                                fallback = True
-
-                    if fallback is False:
-                        if os.path.isfile(
-                            os.path.join(
-                                os.path.dirname(ftpath),
-                                os.path.basename(ftpath.replace(extractedWidth, "")),
-                            )
-                        ):
-                            self.fonts2merge_list.append(ftpath.replace(extractedWidth, ""))
-                            print(
-                                "  ✓",
-                                os.path.basename(ftpath.replace(extractedWidth, "")),
-                                "[FALLBACK]",
-                            )
-                        else:
-                            fallback = False
-                            if s.split("-")[1] in typographicStyles:
-                                localisation = typographicStyles.index(s.split("-")[1])
-                            for styl in typographicStyles[localisation:]:
-                                if fallback is False:
-                                    if os.path.isfile(
-                                        os.path.join(
-                                            os.path.dirname(ftpath),
-                                            os.path.basename(ftpath.replace(self.tempStyle, styl)),
-                                        )
-                                    ):
-                                        self.fonts2merge_list.append(
-                                            ftpath.replace(
-                                                ftpath,
-                                                os.path.join(
-                                                    os.path.dirname(ftpath),
-                                                    os.path.basename(
-                                                        ftpath.replace(self.tempStyle, styl)
-                                                    ),
-                                                ),
-                                            )
-                                        )
-                                        print(
-                                            "  ✓",
-                                            os.path.basename(ftpath.replace(self.tempStyle, styl)),
-                                            "[FALLBACK]",
-                                        )
-                                        fallback = True
+        for s in self.wghtwdth_styles:
+            print("> Gather fonts to build", self.newName, s)
+            self.tempStyle = s.replace("-", "")
+            self.fonts2merge_list = []
+            print("> The followings fonts can be merged:")
+            for n in self.repoNames:
+                ftname = "-".join([n, self.tempStyle]) + ".ttf"
+                if "Italic" in ftname:
+                    old = "-Italic-" + self.tempStyle
+                    new = "-" + self.tempStyle + "Italic"
+                    ftname = ftname.replace(
+                        old, new.replace("Regular", "")
+                    )  # remove Reg in the Italic case)
+                ftpath = os.path.join(self.notoFontsFolder, n, self.path, ftname)
+                if Path(ftpath).exists():
+                    print("  ✓", os.path.basename(ftpath))
+                    self.fonts2merge_list.append(ftpath)
                 else:
-                    localisation = 8
-                    fallback = False
-                    if s in typographicStyles:
-                        localisation = typographicStyles.index(s)
-                    for styl in typographicStyles[localisation:]:
+                    if "-" in s: #width incompatibility
+                        extractedWidth = s.split("-")[0]
+
+                        fallback = False
+                        if s.split("-")[1] in typographicStyles:
+                            localisation = typographicStyles.index(s.split("-")[1])
+                        for styl in typographicStyles[localisation:]:
+                            if fallback is False:
+                                if os.path.isfile(
+                                    os.path.join(
+                                        os.path.dirname(ftpath),
+                                        os.path.basename(ftpath.replace(self.tempStyle, extractedWidth+styl)),
+                                    )
+                                ):
+                                    self.fonts2merge_list.append(
+                                        ftpath.replace(
+                                            ftpath,
+                                            os.path.join(
+                                                os.path.dirname(ftpath),
+                                                os.path.basename(
+                                                    ftpath.replace(self.tempStyle, extractedWidth+styl)
+                                                ),
+                                            ),
+                                        )
+                                    )
+                                    print(
+                                        "  ✓",
+                                        os.path.basename(ftpath.replace(self.tempStyle, extractedWidth+styl)),
+                                        "[FALLBACK]",
+                                    )
+                                    fallback = True
+
                         if fallback is False:
                             if os.path.isfile(
                                 os.path.join(
                                     os.path.dirname(ftpath),
-                                    os.path.basename(ftpath.replace(s, styl)),
+                                    os.path.basename(ftpath.replace(extractedWidth, "")),
                                 )
                             ):
-                                self.fonts2merge_list.append(
-                                    ftpath.replace(
-                                        ftpath,
-                                        os.path.join(
-                                            os.path.dirname(ftpath),
-                                            os.path.basename(
-                                                ftpath.replace(s, styl)
-                                            ),
-                                        ),
-                                    )
-                                )
+                                self.fonts2merge_list.append(ftpath.replace(extractedWidth, ""))
                                 print(
                                     "  ✓",
-                                    os.path.basename(ftpath.replace(s, styl)),
+                                    os.path.basename(ftpath.replace(extractedWidth, "")),
                                     "[FALLBACK]",
                                 )
-                                fallback = True
+                            else:
+                                fallback = False
+                                if s.split("-")[1] in typographicStyles:
+                                    localisation = typographicStyles.index(s.split("-")[1])
+                                for styl in typographicStyles[localisation:]:
+                                    if fallback is False:
+                                        if os.path.isfile(
+                                            os.path.join(
+                                                os.path.dirname(ftpath),
+                                                os.path.basename(ftpath.replace(self.tempStyle, styl)),
+                                            )
+                                        ):
+                                            self.fonts2merge_list.append(
+                                                ftpath.replace(
+                                                    ftpath,
+                                                    os.path.join(
+                                                        os.path.dirname(ftpath),
+                                                        os.path.basename(
+                                                            ftpath.replace(self.tempStyle, styl)
+                                                        ),
+                                                    ),
+                                                )
+                                            )
+                                            print(
+                                                "  ✓",
+                                                os.path.basename(ftpath.replace(self.tempStyle, styl)),
+                                                "[FALLBACK]",
+                                            )
+                                            fallback = True
+                    else:
+                        localisation = 8
+                        fallback = False
+                        if s in typographicStyles:
+                            localisation = typographicStyles.index(s)
+                        for styl in typographicStyles[localisation:]:
+                            if fallback is False:
+                                if os.path.isfile(
+                                    os.path.join(
+                                        os.path.dirname(ftpath),
+                                        os.path.basename(ftpath.replace(s, styl)),
+                                    )
+                                ):
+                                    self.fonts2merge_list.append(
+                                        ftpath.replace(
+                                            ftpath,
+                                            os.path.join(
+                                                os.path.dirname(ftpath),
+                                                os.path.basename(
+                                                    ftpath.replace(s, styl)
+                                                ),
+                                            ),
+                                        )
+                                    )
+                                    print(
+                                        "  ✓",
+                                        os.path.basename(ftpath.replace(s, styl)),
+                                        "[FALLBACK]",
+                                    )
+                                    fallback = True
+            # print(self.fonts2merge_list)
+            # subset Latin / Greek / Cyrillic if needed
+            self.lgcSub()
+            # subset Arabic if needed
+            if "Arabic" in self.writingSystems:
+                if "BasicArabic" in self.preset:
+                    for ar in self.repoNames:
+                        if ar in self.arabicFamilies:
+                            self.arabicSub(ar)
+            # Resolve duplicates
+            if self.duplicatesAreResolved is False:
+                self.resolveDuplicate()
+            # remove duplicates
+            self.prepFontsForMerging()
+
+    def findFallbackStyle(self, width, ftpath):
+        print("TEST FALLBACK")
+        if width in self.tempStyle:
+            if self.tempStyle == width:
+                normalwidthpath = ftpath.replace(width, "Regular")
+                # BECAUSE "NONNORMALWIDTH-REGULAR" IS CALLED "NONNORMALWIDTH"
+            else:
+                normalwidthpath = ftpath.replace(width, "")
+            if Path(normalwidthpath).exists():
+                # print(normalwidthpath)
+                return normalwidthpath
+            else:
+                print("Not possible to find a fallback for ", os.path.basename(ftpath))
 
     def ft2uni(self):
         ft2unilist = dict()
@@ -656,41 +678,51 @@ class Notobuilder:
         self.duplicatedToRemove = GlyphsToRemove()
         fonts2test = copy.deepcopy(self.fonts2merge_list)
         ft2unilist = self.ft2uni()
-        self.script2warnSubset = dict()
-
-        uniNaming = ["", "U+000", "U+00", "U+0", "U+"]
 
         while len(fonts2test) > 1:
             for i in fonts2test[1:]:
                 ft2uni_temp = dict()
                 ft2uni_temp[fonts2test[0]] = ft2unilist[fonts2test[0]]
                 ft2uni_temp[i] = ft2unilist[i]
-                identicAlreadyDone, duplicates = self.getIdentic(ft2uni_temp)
+                identicAlreadyDone, duplicateTodisplay = self.getIdentic(ft2uni_temp)
                 if len(identicAlreadyDone) != 0:
                     self.duplicatedToRemove.addGlyphToRemove(
                         identicAlreadyDone, os.path.basename(i).split("-")[0]
                         )
-                if len(duplicates) != 0:
+                if len(duplicateTodisplay) != 0:
                     removedUni = []
-                    for d in set(duplicates+identicAlreadyDone):
+                    for d in duplicateTodisplay:
                         u = str(hex(d)).upper()[2:]
-                        uni = uniNaming[len(u)] + u
-                        removedUni.append(uni)
-                    warnSubset = "    WARN: " + " ".join(removedUni) + " are removed from " + os.path.basename(i)
-                    # print(warnSubset)
-                    self.script2warnSubset[os.path.basename(i).split("-")[0]] = warnSubset
+                        if len(u) == 1:
+                            u = "U+000" + u
+                        elif len(u) == 2:
+                            u = "U+00" + u
+                        elif len(u) == 3:
+                            u = "U+0" + u
+                        else:
+                            u = "U+" + u
+                        removedUni.append(u)
+                    print(
+                        "\n    WARN:",
+                        " ".join(removedUni),
+                        "are removed from",
+                        os.path.basename(i),
+                        )
+                    # print(self.getChrs(duplicateTodisplay))
                     self.duplicatedToRemove.addGlyphToRemove(
-                        duplicates, os.path.basename(i).split("-")[0]
+                        duplicateTodisplay, os.path.basename(i).split("-")[0]
                         )
             del fonts2test[0]
         self.duplicatesAreResolved = True
 
-    def population(self, path, script2glifToDel):
-        populate = []
-        uniToremove = [i for i in script2glifToDel[os.path.basename(path).split("-")[0]]]
+    def population(self, path):
+        populate = list()
+        uniToremove = self.duplicatedToRemove.getGlyphsToRemove(
+            os.path.basename(path).split("-")[0]
+        )
         uni2glyphname = self.uni2glyphname(path)
         for uni in uni2glyphname:
-            if uni not in uniToremove:
+            if str(uni) not in uniToremove:
                 populate.append(uni2glyphname[uni])
         return populate
 
@@ -699,19 +731,16 @@ class Notobuilder:
         if not os.path.exists(self.destination):
             os.makedirs(self.destination)
 
-        glifToRemove = self.duplicatedToRemove.getDict()
-
         self.actualFonts2merge = list()
         self.subsettedFonts2remove = list()
+        # print("\n")
         for path in self.fonts2merge_list:
             if (
                 os.path.basename(path).split("-")[0]
-                in glifToRemove
+                in self.duplicatedToRemove.getScriptsToSubset()
                 ):
                 print("    INFO:", os.path.basename(path).split("-")[0], "subseted")
-                if os.path.basename(path).split("-")[0] in self.script2warnSubset:
-                    print(self.script2warnSubset[os.path.basename(path).split("-")[0]])
-                keep = self.population(path, glifToRemove)
+                keep = self.population(path)
                 font = self.subsetter(ttLib.TTFont(path), keep)
                 font.save(os.path.join(self.destination, os.path.basename(path)))
                 self.actualFonts2merge.append(
@@ -722,6 +751,8 @@ class Notobuilder:
                     )
             else:
                 self.actualFonts2merge.append(path)
+
+        self.merging()
 
     def merging(self):
         print("    INFO: starts merging")
@@ -805,19 +836,17 @@ class Notobuilder:
     def getIdentic(self, mydict):
         values = list(mydict.values())
         identic = copy.deepcopy(set(values[0]))
-        identic2add = []
-        allDuplicates = []
+        identic2display = []
         identicAlreadyDone = []
         for x in values[1:]:
             identic = identic & set(x)
-        allDuplicates = [ad for ad in identic]
         for i in identic:
             if i not in self.uniGlyphsAlreadySorted:
                 self.uniGlyphsAlreadySorted.append(i)
-                identic2add.append(i)
+                identic2display.append(i)
             else:
                 identicAlreadyDone.append(i)
-        return identicAlreadyDone, identic2add
+        return identicAlreadyDone, identic2display
 
     def duplicate(self, head, tail):
         self.toKeep = {**self.uni2glyphname(head), **self.toKeep}
@@ -857,7 +886,6 @@ class Notobuilder:
         """
         options = Options()
         options.layout_features = "*"  # keep all GSUB/GPOS features
-        # options.no_layout_closure = True # TESTING
         options.glyph_names = False  # keep post glyph names
         options.legacy_cmap = True  # keep non-Unicode cmaps
         options.name_legacy = True  # keep non-Unicode names
@@ -881,7 +909,7 @@ class Notobuilder:
         options.name_legacy = True  # keep non-Unicode names
         options.name_IDs = ["*"]  # keep all nameIDs
         options.name_languages = ["*"]  # keep all name languages
-        options.notdef_outline = True
+        options.notdef_outline = False
         options.ignore_missing_glyphs = False
         options.recommended_glyphs = True
         options.prune_unicode_ranges = True
@@ -1039,7 +1067,7 @@ class Notobuilder:
             vMaj = self.version.split(".")[0]
             vMin = self.version.split(".")[1]
         else :
-            vMaj, vMin = self.version, "000"
+            vMaj, vMin = self.version, "00"
         isThere17 = False
         isThere16 = False
         if self.newName:
@@ -1140,20 +1168,20 @@ def main():
     parser.add_argument("--swap", nargs="*", help="Replace the I and J shapes by the alternate ones (arg : 'altIJ');"+
         " or replace default figures (that are lining and monospaced) by : - old style figures (arg: 'osf'),"+
         " - or tabular old style figures (arg: 'tosf'); or proportional lining figures ('plf').")
-    parser.add_argument("--preset", nargs="*", help ="Premade subsets.")
-    parser.add_argument("--weight", nargs="*", help="Input the weight(s) you want. Default is Regular")
-    parser.add_argument("--width", nargs="*", help="Input the weight(s) you want. Normal is default")
-    parser.add_argument("--hinted", action="store_true", help="Use the hinted version of the fonts.")
+    parser.add_argument("--preset", nargs="*")
+    parser.add_argument("--weight", nargs="*")
+    parser.add_argument("--width", nargs="*")
+    parser.add_argument("--hinted")
     parser.add_argument("--ui", help="Use the UI version of the family if it exists." +
-        " Tighter vertical metrics and mark positioning.", action="store_true")
-    parser.add_argument("--metrics", nargs=2, help="Modify the vertical metrics.")
+        " Tighter vertical metrics and mark positioning.")
+    parser.add_argument("--metrics", nargs=2, help="")
     parser.add_argument("--subset", nargs=1)
     parser.add_argument("--compatibility", action="store_true")
-    parser.add_argument("--version", nargs=1, help="Change the version number.")
+    parser.add_argument("--version", nargs=1, help="")
     args = parser.parse_args()
 
     version = "1.000"
-    newName = ["MyNoto"]
+    newName = "My Noto"
     subset = ""
     preset = list()
     swapedstyles = list()
@@ -1199,17 +1227,18 @@ def main():
         args.scripts,  # list of writing systems
         args.contrast,  # sans or serif
         styles,  # italic, kufi, display, etc…
-        preset,  # pre made subset
-        swapedstyles,  # swap the IJ shapes, use [tabular] old style/lining figures as default
+        preset,  # TBD
+        swapedstyles,  # TODO
         weight,  # list of weight. Set as Regular if not specified
         width,  # list of width. Set as Normal if not specified
         hinted,  # take unhinted fonts as default.
-        ui, #use the UI version if it exists
-        metrics, #modify the vertical metrics
-        compatibility, #choose only common width / weights
-        subset, # keep only the asked glyphs
-        version # change the version number
+        ui,
+        metrics,
+        compatibility,
+        subset,
+        version
     )
+
 
 if __name__ == "__main__":
     sys.exit(main())

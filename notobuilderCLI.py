@@ -306,8 +306,9 @@ class Notobuilder:
             "NotoSerifMusic": "NotoMusic",
             "NotoSerifNaskh": "NotoNaskhArabic",
             "NotoSerifNaskhUI": "NotoNaskhArabicUI",
-            "NotoSerifNastaliq": "NotoNastaliqUrdu",
-            "NotoSerifHebrew": "NotoRashiHebrew",
+            "NotoSerifNastaliqUrdu": "NotoNastaliqUrdu",
+            #"NotoSerifHebrew": "NotoRashiHebrew",
+            "NotoSerifRashi": "NotoRashiHebrew",
             # "NotoSerifNushu": "NotoTraditionalNushu",
             "NotoSerifTamil-Italic": "NotoSerifTamilSlanted",
             "NotoSansTamil-Italic": "NotoSansTamil",  # Does not exists, but Serif "Italic" (slanted) does.

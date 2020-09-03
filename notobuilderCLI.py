@@ -38,7 +38,8 @@ from third_party.scalefonts import scale_font
 
 
 class Download:
-    def __init__(self, repo_names, scriptsFolder, hinted=False):
+    def __init__(self, local_folder, repo_names, scriptsFolder, hinted=False):
+        self.local_file = local_folder
         self.repoNames = repo_names
         self.notoFontsFolder = os.path.join(scriptsFolder, "NotoFonts")
         if not os.path.exists(self.notoFontsFolder):
@@ -75,7 +76,7 @@ class Download:
         return self.sha
         # if response.getcode() != 404
         # elif response.getcode() == 404:
-        #     print("Too much Gituh Requests.")
+        # print("Too much Gituh Requests.")
 
     def writeSha(self, repoName):
         shaTxt = os.path.join(self.notoFontsFolder, repoName, "sha.md")
@@ -83,69 +84,88 @@ class Download:
             text.write(self.sha)
 
     def dwnldFonts(self):
+        current_url = "https://api.github.com/repos/notofonts/"
+        if self.local_file  is True:
+            current_url = "notofonts/"
+            
         for i in self.repoNames:
             if self.hinted is False:
-                url = (
-                    "https://api.github.com/repos/notofonts/"
-                    + i
-                    + "/tree/master/fonts/ttf/unhinted/instance_ttf"
-                )
+                if self.local_file  is True: 
+                    url = (
+                        current_url
+                        + i
+                        + "/instance_ttf"
+                        #"/tree/master/fonts/ttf/unhinted/instance_ttf"
+                    )
+                else:
+                    url = (
+                        current_url
+                        + i
+                        + "/tree/master/fonts/ttf/unhinted/instance_ttf"
+                    )                    
             else:
-                url = (
-                    "https://api.github.com/repos/notofonts/"
-                    + i
-                    + "/tree/master/fonts/ttf/hinted/instance_ttf"
-                )
-            try:
-                r = urllib.request.urlretrieve("https://github.com/notofonts/" + i)
-                api_url = self.createUrl(url)
-            except:
+                if self.local_file  is True: 
+                    url = (
+                        current_url
+                        + i
+                        + "/instance_ttf"
+                    )
+                else:
+                    url = (
+                        current_url
+                        + i
+                        + "/tree/master/fonts/ttf/hinted/instance_ttf"
+                    )   
+            if self.local_file  is False:
                 try:
-                    askedByUser = i
-                    i = i.replace("Serif", "Sans")
-                    url = url.replace("Serif", "Sans")
-                    r = urllib.request.urlretrieve("https://github.com/notofonts/" + i)
-                    for z in range(len(self.editedRepoNames)):
-                        if self.editedRepoNames[z] == askedByUser:
-                            self.editedRepoNames[z] = i
                     api_url = self.createUrl(url)
                 except:
-                    print(i.replace("Sans", "Serif"), "does not exist." +
-                            "Removed from writing system list"
-                            )
-                    self.editedRepoNames.remove(askedByUser)
-                    continue
-            # CHECK SHA
-            dlBool = True
-            if os.path.exists(os.path.join(self.notoFontsFolder, i)):
-                # print(">>> ", self.oldSha(i), self.getSha(i))
-                if self.oldSha(i) == self.getSha(i):
-                    dlBool = False
-                else:
-                    print("else")
-                    dlBool = True
-            if dlBool is True:
-                print("INFO: "+i+" download begin")
-                dest = self.getFilepathFromUrl(url, self.notoFontsFolder)
-                dest = os.path.join(os.path.dirname(dest), i, "instance_ttf")
-                if not os.path.exists(dest):
-                    os.makedirs(dest)
-                response = urllib.request.urlretrieve(api_url)
-                with open(response[0], "r") as f:
-                    data_brutes = f.read()
-                    data = json.loads(data_brutes)
-                    for index, file in enumerate(data):
-                        file_url = file["download_url"]
-                        file_name = file["name"]
-                        temp_path = os.path.join(dest, file_url.split(
-                            "/")[-1]).replace("%20", " "
+                    try:
+                        askedByUser = i
+                        i = i.replace("Serif", "Sans")
+                        url = url.replace("Serif", "Sans")
+                        _ = self.getSha(i)
+                        for z in range(len(self.editedRepoNames)):
+                            if self.editedRepoNames[z] == askedByUser:
+                                self.editedRepoNames[z] = i
+                        api_url = self.createUrl(url)
+                    except:
+                        print(i.replace("Sans", "Serif"), "does not exist." +
+                                "Removed from writing system list"
                                 )
-                        if file_url is not None:
-                            with requests.get(file_url) as response:
-                                binary = response.content
-                                self.writeBin(temp_path, binary)
-                self.getSha(i)
-                self.writeSha(i)
+                        self.editedRepoNames.remove(askedByUser)
+                        continue
+            # CHECK SHA
+                dlBool = True
+                if os.path.exists(os.path.join(self.notoFontsFolder, i)):
+                    # print(">>> ", self.oldSha(i), self.getSha(i))
+                    if self.oldSha(i) == self.getSha(i):
+                        dlBool = False
+                    else:
+                        print("else")
+                        dlBool = True
+                if dlBool is True:
+                    print("INFO: "+i+" download begin")
+                    dest = self.getFilepathFromUrl(url, self.notoFontsFolder)
+                    dest = os.path.join(os.path.dirname(dest), i, "instance_ttf")
+                    if not os.path.exists(dest):
+                        os.makedirs(dest)
+                    response = urllib.request.urlretrieve(api_url)
+                    with open(response[0], "r") as f:
+                        data_brutes = f.read()
+                        data = json.loads(data_brutes)
+                        for index, file in enumerate(data):
+                            file_url = file["download_url"]
+                            file_name = file["name"]
+                            temp_path = os.path.join(dest, file_url.split(
+                                "/")[-1]).replace("%20", " "
+                                    )
+                            if file_url is not None:
+                                with requests.get(file_url) as response:
+                                    binary = response.content
+                                    self.writeBin(temp_path, binary)
+                    self.getSha(i)
+                    self.writeSha(i)
 
     def writeBin(self, path, binary):
         with open(path, "wb") as f:
@@ -211,6 +231,7 @@ class Notobuilder:
 
     def __init__(
         self,
+        local,
         newName,
         output,
         writingsystems,
@@ -230,6 +251,7 @@ class Notobuilder:
         self.scriptsFolder = os.path.split(sys.argv[0])[0]
         self.notoFontsFolder = os.path.join(self.scriptsFolder, "NotoFonts")
         self.writingSystems = writingsystems
+        self.local = local
         self.newName = str(" ".join(newName))
         self.output = output  # OTF and VF merging not available
         self.preset = preset
@@ -277,9 +299,10 @@ class Notobuilder:
             "NotoSerifMusic": "NotoMusic",
             "NotoSerifNaskh": "NotoNaskhArabic",
             "NotoSerifNaskhUI": "NotoNaskhArabicUI",
-            "NotoSerifNastaliq": "NotoNastaliqUrdu",
-            "NotoSerifHebrew": "NotoRashiHebrew",
-            # "NotoSerifNushu": "NotoTraditionalNushu", #because traditional Nushu naming is bugged
+            "NotoSerifNastaliqUrdu": "NotoNastaliqUrdu",
+            #"NotoSerifHebrew": "NotoRashiHebrew",
+            "NotoSerifRashi": "NotoRashiHebrew",
+            # "NotoSerifNushu": "NotoTraditionalNushu",
             "NotoSerifTamil-Italic": "NotoSerifTamilSlanted",
             "NotoSansTamil-Italic": "NotoSansTamil",  # Does not exists, but Serif "Italic" (slanted) does.
             "NotoSansNaskh": "NotoSansArabic",
@@ -329,7 +352,7 @@ class Notobuilder:
         #1. FIND THE REPO NAME
         self.buildRepoName()
         #2. DOWNLOAD FONTS AND SWITCH CONTRAST STYLE IF NEEDED
-        dl = Download(self.repoNames, self.scriptsFolder, self.hinted)
+        dl = Download(self.local, self.repoNames, self.scriptsFolder, self.hinted)
         dl.dwnldFonts()
         self.repoNames = dl.getEditedRepoNames()
         #3. BUILD ALL WIDTH-WEIGHT STYLE NAME
@@ -1125,6 +1148,7 @@ class Notobuilder:
 
 def main():
     parser = ArgumentParser()
+    parser.add_argument("--local", action="store_true")
     parser.add_argument(
         "-n", "--name", help="Rename the custom fonts as asked.", nargs=1)
     parser.add_argument(
@@ -1165,7 +1189,10 @@ def main():
     ui = False
     metrics = []
     compatibility = False
-
+    local = False
+    
+    if "--local" in sys.argv or "-l" in sys.argv:
+        local = True
     if "--output" in sys.argv or "-o" in sys.argv:
         output = args.output
     if "--styles" in sys.argv:
@@ -1194,6 +1221,7 @@ def main():
         version = args.version
 
     build = Notobuilder(
+        local,  # optional
         newName,  # optional
         output,  # only ttf (and therefor woff2) for now
         args.scripts,  # list of writing systems
